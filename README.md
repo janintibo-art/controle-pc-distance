@@ -25,3 +25,10 @@ Le workflow GitHub Actions compile un APK Android et un EXE Windows (distribue a
 ## V3 — diagnostic de connexion
 
 Depuis Android, la verification affiche le nom du PC, la duree de la requete et la date du dernier test. Depuis Windows, le bouton permet de copier l’adresse IP locale. Cette version ne transmet pas encore video, souris, clavier ou fichiers. La communication HTTP locale sert exclusivement a authentifier le diagnostic : ne pas exposer le port 47186 sur Internet.
+
+
+## V4 — Aperçu du bureau sur Wi-Fi local
+
+Dans l'EXE Windows : activer le serveur, puis aller dans **Bureau** et autoriser les captures. Dans l'APK : saisir l'IP privée et le code, tester la connexion, puis ouvrir **Bureau** et demander une capture. Rafraîchissement facultatif toutes les 3 secondes.
+
+**Sécurité :** prototype uniquement sur réseau Wi-Fi privé de confiance, images JPEG transmises en HTTP **sans chiffrement**. Éviter impérativement toute information sensible à l'écran. Ne pas ouvrir de ports sur Internet. Une version TLS avec épinglage du certificat, une vraie diffusion et les contrôles souris/clavier sont nécessaires avant utilisation distante.

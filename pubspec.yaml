@@ -1,7 +1,7 @@
 name: controle_pc_distance
-description: Controle PC Distance - liaison locale avec verification HMAC et diagnostic reseau
+description: Controle PC Distance - liaison locale avec verification HMAC et apercu du bureau Windows sur LAN
 publish_to: none
-version: 3.0.0+3
+version: 4.0.0+4
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:

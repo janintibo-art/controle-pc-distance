@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v3
+      - uses: subosito/flutter-action@v4
         with:
           channel: stable
           cache: true
@@ -27,7 +27,7 @@ jobs:
         run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
-          name: controle_pc_distance_v3_android
+          name: controle_pc_distance_v4_android
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
   windows:
@@ -35,7 +35,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v3
+      - uses: subosito/flutter-action@v4
         with:
           channel: stable
           cache: true
@@ -49,37 +49,37 @@ jobs:
         run: flutter build windows --release
       - name: Emballer EXE et ses DLL
         shell: pwsh
-        run: Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'controle_pc_distance_v3_windows.zip' -Force
+        run: Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'controle_pc_distance_v4_windows.zip' -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: controle_pc_distance_v3_windows
-          path: controle_pc_distance_v3_windows.zip
+          name: controle_pc_distance_v4_windows
+          path: controle_pc_distance_v4_windows.zip
           if-no-files-found: error
   release:
-    name: Publier Release V3
+    name: Publier Release V4
     needs: [android, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: controle_pc_distance_v3_android
+          name: controle_pc_distance_v4_android
           path: dist/android
       - uses: actions/download-artifact@v4
         with:
-          name: controle_pc_distance_v3_windows
+          name: controle_pc_distance_v4_windows
           path: dist/windows
       - name: Renommer APK
-        run: cp dist/android/app-release.apk dist/controle_pc_distance_v3.apk
-      - uses: softprops/action-gh-release@v3
+        run: cp dist/android/app-release.apk dist/controle_pc_distance_v4.apk
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3
+          tag_name: v4
           target_commitish: main
-          name: Controle PC Distance - V3
+          name: Controle PC Distance - V4
           body: |
-            V3 : communication locale Windows/Android sans Tailscale, preuve HMAC du code sans envoyer le secret, interface et jumelage.
-            Le bureau distant, les transferts et le controle de la carte Tuya ne sont pas encore implementes.
+            V4 : premier apercu de captures Windows sur Android en reseau local avec activation explicite. ATTENTION : images non chiffrees, reseau prive de confiance seulement.
+            Le controle souris/clavier, streaming fluide, transferts, relais Internet et Tuya ne sont pas encore implementes.
             Sur Windows, decompresser toute l'archive avant de lancer l'EXE.
           files: |
-            dist/controle_pc_distance_v3.apk
-            dist/windows/controle_pc_distance_v3_windows.zip
+            dist/controle_pc_distance_v4.apk
+            dist/windows/controle_pc_distance_v4_windows.zip
           overwrite_files: true

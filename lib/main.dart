@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +49,11 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? lastFailure;
   bool busy = false;
   bool connected = false;
+  bool sharing = false;
+  bool refreshing = false;
+  Uint8List? screenFrame;
+  Timer? refreshTimer;
+  String screenMessage = 'Capture inactive';
   int tab = 0;
   final bool windows = Platform.isWindows;
 
@@ -95,6 +102,8 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       if (link.isServing) {
         await link.stopHost();
+        sharing = false;
+        link.screenSharingEnabled = false;
         info = 'Serveur arrete';
       } else {
         await link.startHost(code.text);
@@ -110,11 +119,60 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    refreshTimer?.cancel();
     link.stopHost();
     ip.dispose();
     code.dispose();
     super.dispose();
   }
+
+  Future<void> _capture() async {
+    if (windows || refreshing || !connected) return;
+    setState(() => refreshing = true);
+    try {
+      final data = await RemoteLink.fetchScreen(ip.text.trim(), code.text.trim());
+      if (mounted) setState(() { screenFrame = Uint8List.fromList(data); screenMessage = 'Capture recue · ${data.length ~/ 1024} Ko'; });
+    } catch (e) {
+      if (mounted) setState(() => screenMessage = 'Capture indisponible : $e');
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
+  void _autoRefresh(bool enabled) {
+    refreshTimer?.cancel();
+    refreshTimer = enabled ? Timer.periodic(const Duration(seconds: 3), (_) => _capture()) : null;
+    if (enabled) _capture();
+    setState(() {});
+  }
+
+  Widget _desktopPanel() => _surface(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    const Text('APERÇU DU BUREAU · V4', style: TextStyle(color: cyan, fontWeight: FontWeight.w800)),
+    const SizedBox(height: 12),
+    const Text('Capture sur le reseau Wi-Fi local. Pas encore de controle souris/clavier ni de streaming video fluide.'),
+    const SizedBox(height: 12),
+    if (windows) ...[
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Autoriser temporairement les captures'),
+        subtitle: const Text('Uniquement lorsque le serveur est actif. Desactive par defaut.'),
+        value: sharing, onChanged: link.isServing ? (value) => setState(() { sharing = value; link.screenSharingEnabled = value; }) : null,
+      ),
+      const Text('Attention : sur ce prototype, les images circulent sans chiffrement sur le reseau local. Ne partagez aucun contenu sensible.', style: TextStyle(color: Color(0xFFFFC17D), fontSize: 12)),
+    ] else ...[
+      const Text('Attention : images transmises sans chiffrement sur ce prototype LAN. Utiliser seulement un reseau Wi-Fi prive de confiance, sans contenu sensible.', style: TextStyle(color: Color(0xFFFFC17D), fontSize: 12)),
+      const SizedBox(height: 14),
+      if (screenFrame != null) ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(screenFrame!, gaplessPlayback: true)),
+      if (screenFrame == null) const SizedBox(height: 150, child: Center(child: Icon(Icons.desktop_windows, size: 65, color: violet))),
+      const SizedBox(height: 12),
+      Text(screenMessage, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      const SizedBox(height: 8),
+      FilledButton.icon(onPressed: connected && !refreshing ? _capture : null,
+        icon: const Icon(Icons.camera_alt_outlined), label: Text(refreshing ? 'Capture en cours...' : 'Afficher une capture')),
+      SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Actualiser toutes les 3 secondes'),
+        value: refreshTimer != null, onChanged: connected ? _autoRefresh : null),
+    ],
+  ]));
 
   Widget _surface(Widget child, {Color? color}) => Container(
     padding: const EdgeInsets.all(20),
@@ -137,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const SizedBox(width: 14),
     const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('CONTROLE PC', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4, fontSize: 19)),
-      Text('DISTANCE  /  V3', style: TextStyle(color: cyan, letterSpacing: 2.3, fontSize: 10, fontWeight: FontWeight.w700)),
+      Text('DISTANCE  /  V4', style: TextStyle(color: cyan, letterSpacing: 2.3, fontSize: 10, fontWeight: FontWeight.w700)),
     ])),
     _tag(windows ? 'WINDOWS' : 'ANDROID', windows ? Icons.desktop_windows : Icons.phone_android, cyan),
   ]);
@@ -157,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Text(windows ? 'Votre PC, pret a etre rejoint.' : 'Votre PC. Partout avec vous.',
         style: const TextStyle(fontSize: 26, height: 1.12, fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
-      const Text('V3 : diagnostic de liaison locale et mesure de latence. Acces Internet, bureau distant et carte Tuya restent a developper.',
+      const Text('V4 : premier apercu du bureau sur Wi-Fi prive, avec autorisation explicite sur le PC. Souris, clavier, Internet et Tuya restent a developper.',
         style: TextStyle(color: Color(0xFFB9C4DA), height: 1.5)),
     ]));
 
@@ -231,17 +289,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _page() {
     if (tab == 0) return Column(children: [
       _hero(), const SizedBox(height: 18), _connectionPanel(), const SizedBox(height: 18),
-      _module(Icons.desktop_windows, 'Bureau distant', 'Streaming et commandes : en developpement', violet),
+      _module(Icons.desktop_windows, 'Bureau distant', 'Apercu capture LAN disponible dans Bureau', violet),
       const SizedBox(height: 12),
       _module(Icons.folder_copy_outlined, 'Fichiers & telechargements', 'Envoi, reception et suivi : prochaine etape', cyan),
       const SizedBox(height: 12),
       _module(Icons.power_settings_new, 'Alimentation PC', 'Carte Tuya A3 : integration apres verification', const Color(0xFFFFC17D)),
     ]);
-    if (tab == 1) return Column(children: [
-      _surface(const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('BUREAU DISTANT', style: TextStyle(color: cyan, fontWeight: FontWeight.w800)),
-        SizedBox(height: 13), Text('La V3 ajoute un diagnostic de connexion (nom du PC, latence du test). Le partage d’ecran, le clavier et la souris ne sont pas encore disponibles.'),
-      ]))]);
+    if (tab == 1) return Column(children: [_desktopPanel()]);
     if (tab == 2) return Column(children: [
       _surface(const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('FICHIERS & TELECHARGEMENTS', style: TextStyle(color: cyan, fontWeight: FontWeight.w800)),
@@ -251,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _surface(const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('GUIDE DE CONNEXION', style: TextStyle(color: cyan, fontWeight: FontWeight.w800)),
         SizedBox(height: 14),
-        Text('1. Connectez le PC et Android au meme Wi-Fi prive.\n\n2. Sur Windows, ouvrez l’EXE, copiez l’adresse IP locale et le code, puis activez le serveur.\n\n3. Sur Android, saisissez cette adresse et ce code. Appuyez sur Tester la connexion.\n\n4. Autorisez l’application sur le pare-feu Windows pour votre reseau prive uniquement. N’ouvrez PAS de port sur la box.\n\n5. La connexion Internet et la carte Tuya A3 seront ajoutees apres verification technique.'),
+        Text('1. Connectez le PC et Android au meme Wi-Fi prive.\n\n2. Sur Windows, ouvrez l’EXE, copiez l’adresse IP locale et le code, puis activez le serveur.\n\n3. Sur Android, saisissez cette adresse et ce code. Appuyez sur Tester la connexion.\n\n4. Autorisez l’application sur le pare-feu Windows pour votre reseau prive uniquement. N’ouvrez PAS de port sur la box.\n\n5. Dans Bureau, autorisez le partage de capture depuis Windows. Sur Android, affichez la capture.\n\n6. Ne pas utiliser le partage pour des informations sensibles : transport non chiffre dans cette V4. Internet et Tuya ne sont pas implementes.'),
         SizedBox(height: 13),
       ]))]);
   }
@@ -261,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
     body: SafeArea(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 780),
       child: ListView(padding: const EdgeInsets.all(22), children: [
         _header(), const SizedBox(height: 26), _page(), const SizedBox(height: 18),
-        const Center(child: Text('CONTROLE PC DISTANCE   •   V3', style: TextStyle(fontSize: 10, letterSpacing: 1.8, color: Colors.white38))),
+        const Center(child: Text('CONTROLE PC DISTANCE   •   V4', style: TextStyle(fontSize: 10, letterSpacing: 1.8, color: Colors.white38))),
       ])))),
     bottomNavigationBar: NavigationBar(backgroundColor: const Color(0xFF10192A), height: 72,
       selectedIndex: tab, onDestinationSelected: (v) => setState(() => tab = v),
