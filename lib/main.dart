@@ -43,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final code = TextEditingController();
   String info = 'Aucune connexion active';
   String hostIp = '';
+  HostStatus? lastCheck;
+  DateTime? lastFailure;
   bool busy = false;
   bool connected = false;
   int tab = 0;
@@ -78,11 +80,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _connect() async {
     setState(() { busy = true; info = 'Verification du PC…'; });
     try {
-      final name = await RemoteLink.checkHost(ip.text.trim(), code.text);
+      final status = await RemoteLink.checkHostDetails(ip.text.trim(), code.text);
       await _persist();
-      if (mounted) setState(() { connected = true; info = '$name · Connexion locale active'; });
+      if (mounted) setState(() { connected = true; lastCheck = status; lastFailure = null; info = '${status.name} · Liaison verifiee en ${status.latencyMs} ms'; });
     } catch (e) {
-      if (mounted) setState(() { connected = false; info = 'Connexion impossible : $e'; });
+      if (mounted) setState(() { connected = false; lastFailure = DateTime.now(); info = 'Connexion impossible : $e'; });
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -135,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const SizedBox(width: 14),
     const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('CONTROLE PC', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4, fontSize: 19)),
-      Text('DISTANCE  /  V2', style: TextStyle(color: cyan, letterSpacing: 2.3, fontSize: 10, fontWeight: FontWeight.w700)),
+      Text('DISTANCE  /  V3', style: TextStyle(color: cyan, letterSpacing: 2.3, fontSize: 10, fontWeight: FontWeight.w700)),
     ])),
     _tag(windows ? 'WINDOWS' : 'ANDROID', windows ? Icons.desktop_windows : Icons.phone_android, cyan),
   ]);
@@ -155,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Text(windows ? 'Votre PC, pret a etre rejoint.' : 'Votre PC. Partout avec vous.',
         style: const TextStyle(fontSize: 26, height: 1.12, fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
-      const Text('V2 : connexion locale sans logiciel tiers. Acces depuis Internet, bureau distant et carte Tuya prevus apres la securisation du transport.',
+      const Text('V3 : diagnostic de liaison locale et mesure de latence. Acces Internet, bureau distant et carte Tuya restent a developper.',
         style: TextStyle(color: Color(0xFFB9C4DA), height: 1.5)),
     ]));
 
@@ -177,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
         IconButton(tooltip: 'Copier le code', onPressed: () => Clipboard.setData(ClipboardData(text: code.text)), icon: const Icon(Icons.copy, color: cyan))]),
       SelectableText(code.text, style: const TextStyle(letterSpacing: 2, fontSize: 19, fontWeight: FontWeight.w700)),
       const SizedBox(height: 17),
+      OutlinedButton.icon(onPressed: hostIp.isEmpty ? null : () => Clipboard.setData(ClipboardData(text: hostIp)), icon: const Icon(Icons.copy), label: const Text('Copier l’adresse IP')),
     ] else ...[
       _field(ip, 'IP locale du PC', 'Ex. 192.168.1.20'),
       _field(code, 'Code de jumelage du PC', '20 caracteres'),
@@ -189,7 +192,33 @@ class _HomeScreenState extends State<HomeScreen> {
       style: FilledButton.styleFrom(backgroundColor: cyan, foregroundColor: darkBg))),
     const SizedBox(height: 15),
     Text(info, style: TextStyle(fontSize: 13, color: connected || link.isServing ? cyan : Colors.white70)),
+    if (!windows && lastCheck != null) ...[
+      const SizedBox(height: 16),
+      _diagnostic(),
+    ],
   ]));
+
+  Widget _diagnostic() {
+    final status = lastCheck!;
+    final ms = status.latencyMs;
+    final quality = ms < 80 ? 'Rapide' : (ms < 200 ? 'Moyenne' : 'Lente');
+    final clock = status.checkedAt;
+    final hour = '${clock.hour.toString().padLeft(2, '0')}:${clock.minute.toString().padLeft(2, '0')}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFF0B2C35), borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('DIAGNOSTIC DE LIAISON', style: TextStyle(color: cyan, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Text('PC : ${status.name}'),
+        Text('Temps de reponse : $ms ms ($quality)'),
+        Text('Dernier test : $hour'),
+        const SizedBox(height: 6),
+        const Text('Ce test ne mesure pas encore la fluidite de la video.', style: TextStyle(fontSize: 12, color: Colors.white60)),
+      ]),
+    );
+  }
 
   Widget _module(IconData icon, String title, String detail, Color color) => _surface(
     Row(children: [Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(
@@ -211,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (tab == 1) return Column(children: [
       _surface(const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('BUREAU DISTANT', style: TextStyle(color: cyan, fontWeight: FontWeight.w800)),
-        SizedBox(height: 13), Text('La V2 valide la liaison locale sans Tailscale. Le partage d’ecran, le clavier et la souris ne sont pas encore disponibles.'),
+        SizedBox(height: 13), Text('La V3 ajoute un diagnostic de connexion (nom du PC, latence du test). Le partage d’ecran, le clavier et la souris ne sont pas encore disponibles.'),
       ]))]);
     if (tab == 2) return Column(children: [
       _surface(const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -232,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
     body: SafeArea(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 780),
       child: ListView(padding: const EdgeInsets.all(22), children: [
         _header(), const SizedBox(height: 26), _page(), const SizedBox(height: 18),
-        const Center(child: Text('CONTROLE PC DISTANCE   •   V2', style: TextStyle(fontSize: 10, letterSpacing: 1.8, color: Colors.white38))),
+        const Center(child: Text('CONTROLE PC DISTANCE   •   V3', style: TextStyle(fontSize: 10, letterSpacing: 1.8, color: Colors.white38))),
       ])))),
     bottomNavigationBar: NavigationBar(backgroundColor: const Color(0xFF10192A), height: 72,
       selectedIndex: tab, onDestinationSelected: (v) => setState(() => tab = v),

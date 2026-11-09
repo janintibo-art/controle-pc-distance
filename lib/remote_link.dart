@@ -6,6 +6,13 @@ import 'package:crypto/crypto.dart';
 
 /// V2: verification locale de connexion par defi HMAC.
 /// Ni streaming ni controle distant ne sont ouverts sans transport chiffre.
+class HostStatus {
+  final String name;
+  final int latencyMs;
+  final DateTime checkedAt;
+  const HostStatus(this.name, this.latencyMs, this.checkedAt);
+}
+
 class RemoteLink {
   HttpServer? _server;
   bool get isServing => _server != null;
@@ -98,7 +105,11 @@ class RemoteLink {
     _challenges.clear();
   }
 
-  static Future<String> checkHost(String ip, String code) async {
+  static Future<String> checkHost(String ip, String code) async =>
+      (await checkHostDetails(ip, code)).name;
+
+  static Future<HostStatus> checkHostDetails(String ip, String code) async {
+    final stopwatch = Stopwatch()..start();
     if (!isPrivateIPv4(ip)) throw const FormatException('Saisir une IP locale du PC (192.168.x.x, 10.x.x.x)');
     if (code.trim().isEmpty) throw const FormatException('Saisir le code du PC');
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
@@ -116,7 +127,8 @@ class RemoteLink {
       if (response.statusCode != 200) throw const HttpException('Code incorrect ou acces refuse');
       final data = jsonDecode(body) as Map<String, dynamic>;
       if (data['online'] != true) throw const HttpException('Reponse inattendue');
-      return (data['name'] as String?) ?? 'PC Windows';
+      stopwatch.stop();
+      return HostStatus((data['name'] as String?) ?? 'PC Windows', stopwatch.elapsedMilliseconds, DateTime.now());
     } finally {
       client.close(force: true);
     }

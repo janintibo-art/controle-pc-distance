@@ -21,3 +21,7 @@ Application Flutter Windows (.exe) et Android (.apk) pour le controle a distance
 ## Construction
 
 Le workflow GitHub Actions compile un APK Android et un EXE Windows (distribue avec ses DLL dans un ZIP) puis publie les deux en Releases.
+
+## V3 — diagnostic de connexion
+
+Depuis Android, la verification affiche le nom du PC, la duree de la requete et la date du dernier test. Depuis Windows, le bouton permet de copier l’adresse IP locale. Cette version ne transmet pas encore video, souris, clavier ou fichiers. La communication HTTP locale sert exclusivement a authentifier le diagnostic : ne pas exposer le port 47186 sur Internet.
