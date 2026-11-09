@@ -1,0 +1,17 @@
+name: controle_pc_distance
+description: Controle PC Distance - liaison locale avec verification HMAC
+publish_to: none
+version: 2.0.0+2
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.3.2
+  crypto: ^3.0.6
+dev_dependencies:
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - branding/logo.png

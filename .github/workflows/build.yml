@@ -1,0 +1,85 @@
+name: Compiler APK et EXE
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  android:
+    name: APK Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generer les projets natifs
+        run: flutter create --project-name controle_pc_distance --platforms=android,windows .
+      - name: Appliquer les icones et permissions
+        run: python3 tools/prepare_platforms.py
+      - name: Installer les dependances
+        run: flutter pub get
+      - name: Analyser le code
+        run: flutter analyze --no-fatal-infos
+      - name: Compiler APK
+        run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: controle_pc_distance_v2_android
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+  windows:
+    name: EXE Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generer les projets natifs
+        run: flutter create --project-name controle_pc_distance --platforms=android,windows .
+      - name: Appliquer les icones et permissions
+        run: python tools/prepare_platforms.py
+      - name: Installer les dependances
+        run: flutter pub get
+      - name: Compiler EXE
+        run: flutter build windows --release
+      - name: Emballer EXE et ses DLL
+        shell: pwsh
+        run: Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'controle_pc_distance_v2_windows.zip' -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: controle_pc_distance_v2_windows
+          path: controle_pc_distance_v2_windows.zip
+          if-no-files-found: error
+  release:
+    name: Publier Release V2
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: controle_pc_distance_v2_android
+          path: dist/android
+      - uses: actions/download-artifact@v4
+        with:
+          name: controle_pc_distance_v2_windows
+          path: dist/windows
+      - name: Renommer APK
+        run: cp dist/android/app-release.apk dist/controle_pc_distance_v2.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2
+          target_commitish: main
+          name: Controle PC Distance - V2
+          body: |
+            V2 : communication locale Windows/Android sans Tailscale, preuve HMAC du code sans envoyer le secret, interface et jumelage.
+            Le bureau distant, les transferts et le controle de la carte Tuya ne sont pas encore implementes.
+            Sur Windows, decompresser toute l'archive avant de lancer l'EXE.
+          files: |
+            dist/controle_pc_distance_v2.apk
+            dist/windows/controle_pc_distance_v2_windows.zip
+          overwrite_files: true
